@@ -13,7 +13,9 @@ import {
   Swords,
   Flag,
   Crosshair,
-  HeartHandshake
+  HeartHandshake,
+  Move,
+  MapPin
 } from "lucide-react";
 
 import GameHeader from "./components/GameHeader";
@@ -41,11 +43,10 @@ type SaveData = {
   tab: GameTab;
   log: string[];
   started: boolean;
-
-  // Nové údaje pro vojenský systém.
   armies: Record<string, number>;
   provinceOwners: Record<string, string>;
   wars: string[];
+  armyLocations: Record<string, string>;
 };
 
 function createInitialSave(): SaveData {
@@ -60,8 +61,21 @@ function createInitialSave(): SaveData {
     started: false,
     armies: {},
     provinceOwners: {},
-    wars: []
+    wars: [],
+    armyLocations: {}
   };
+}
+
+function createInitialArmyLocations(): Record<string, string> {
+  return Object.fromEntries(
+    scenario1066.countries.map(country => {
+      const province = scenario1066.provinces.find(
+        item => item.owner === country.id
+      );
+
+      return [country.id, province?.id ?? ""];
+    })
+  );
 }
 
 function readSave(): SaveData {
@@ -79,7 +93,9 @@ function readSave(): SaveData {
         provinceOwners: parsed.provinceOwners ?? {},
         wars: parsed.wars ?? [],
         relations: parsed.relations ?? {},
-        log: parsed.log ?? []
+        log: parsed.log ?? [],
+        armyLocations:
+          parsed.armyLocations ?? createInitialArmyLocations()
       };
     }
   } catch {
@@ -100,8 +116,6 @@ export default function App() {
     country => country.id === save.countryId
   );
 
-  // Dynamické vlastnictví provincií.
-  // Díky tomu se po dobytí změní barva provincie na mapě.
   const gameProvinces = useMemo(
     () =>
       scenario.provinces.map(province => ({
@@ -128,6 +142,40 @@ export default function App() {
         ])
       ),
     [scenario.countries]
+  );
+
+  const armyCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        scenario.countries.map(country => [
+          country.id,
+          save.armies[country.id] ?? country.army
+        ])
+      ),
+    [scenario.countries, save.armies]
+  );
+
+  const playerArmyLocation = player
+    ? save.armyLocations[player.id] ?? ""
+    : "";
+
+  const armyLocationProvince = gameProvinces.find(
+    province => province.id === playerArmyLocation
+  );
+
+  const selectedIsOwned = Boolean(
+    player && selectedProvince?.owner === player.id
+  );
+
+  const selectedIsArmyLocation =
+    selectedProvince?.id === playerArmyLocation;
+
+  const canMoveArmy = Boolean(
+    player &&
+    selectedProvince &&
+    selectedIsOwned &&
+    !selectedIsArmyLocation &&
+    armyLocationProvince?.neighbors.includes(selectedProvince.id)
   );
 
   useEffect(() => {
@@ -201,6 +249,8 @@ export default function App() {
       ])
     );
 
+    const armyLocations = createInitialArmyLocations();
+
     setSave({
       year: scenario.year,
       countryId: country.id,
@@ -214,7 +264,8 @@ export default function App() {
       started: true,
       armies,
       provinceOwners,
-      wars: []
+      wars: [],
+      armyLocations
     });
   }
 
@@ -298,6 +349,33 @@ export default function App() {
     );
   }
 
+  // Přesun armády do sousední vlastní provincie.
+  function moveArmy() {
+    if (!player || !selectedProvince) return;
+
+    if (!canMoveArmy) {
+      updateSave(
+        {},
+        "Armádu lze přesunout pouze do sousední provincie, kterou vlastníš."
+      );
+      return;
+    }
+
+    const fromProvince = armyLocationProvince;
+
+    if (!fromProvince) return;
+
+    updateSave(
+      {
+        armyLocations: {
+          ...save.armyLocations,
+          [player.id]: selectedProvince.id
+        }
+      },
+      `Rok ${save.year}: armáda státu ${player.name} se přesunula z provincie ${fromProvince.name} do provincie ${selectedProvince.name}.`
+    );
+  }
+
   // Vyhlášení války.
   function declareWar(countryId: string) {
     if (!player) return;
@@ -353,7 +431,6 @@ export default function App() {
     );
   }
 
-  // Zjištění, zda je provincie dosažitelná z vlastního území.
   function canAttackProvince(province: Province) {
     if (!player) return false;
 
@@ -430,8 +507,8 @@ export default function App() {
     const victory = attackPower >= defensePower;
 
     const newArmies = { ...save.armies };
-
-    let newProvinceOwners = { ...save.provinceOwners };
+    const newProvinceOwners = { ...save.provinceOwners };
+    const newArmyLocations = { ...save.armyLocations };
 
     if (victory) {
       const attackerLosses = Math.round(attackingArmy * 0.18);
@@ -448,12 +525,27 @@ export default function App() {
       );
 
       newProvinceOwners[currentProvince.id] = player.id;
+      newArmyLocations[player.id] = currentProvince.id;
+
+      // Pokud se zde nacházela nepřátelská armáda,
+      // přesune se do jiné zbývající provincie svého státu.
+      if (newArmyLocations[enemyId] === currentProvince.id) {
+        const enemyRemainingProvince = gameProvinces.find(
+          item =>
+            item.owner === enemyId &&
+            item.id !== currentProvince.id
+        );
+
+        newArmyLocations[enemyId] =
+          enemyRemainingProvince?.id ?? "";
+      }
 
       updateSave(
         {
           treasury: save.treasury - 100,
           armies: newArmies,
           provinceOwners: newProvinceOwners,
+          armyLocations: newArmyLocations,
           selectedProvince: currentProvince.id
         },
         `VÍTĚZSTVÍ! Vojska státu ${player.name} dobyla provincii ${currentProvince.name}. Ztráty: ${attackerLosses} mužů.`
@@ -557,7 +649,7 @@ export default function App() {
         </div>
 
         <div className="selection-footer">
-          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.4.0
+          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.5.0
         </div>
 
         <button
@@ -718,6 +810,110 @@ export default function App() {
     );
   }
 
+  function renderArmyMovement() {
+    if (!player) return null;
+
+    const currentLocation = armyLocationProvince?.name ?? "Neznámá provincie";
+
+    return (
+      <section
+        className="content-panel"
+        style={{
+          marginTop: "16px",
+          padding: "18px"
+        }}
+      >
+        <span className="eyebrow">VOJENSKÉ VELENÍ</span>
+
+        <h3
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "9px",
+            margin: "8px 0"
+          }}
+        >
+          <Move size={21} />
+          Přesun armády
+        </h3>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "12px",
+            margin: "12px 0",
+            borderRadius: "10px",
+            background: "rgba(0,0,0,0.16)"
+          }}
+        >
+          <MapPin size={21} />
+          <div>
+            <strong>{currentLocation}</strong>
+            <div className="muted">
+              Aktuální pozice tvého vojska
+            </div>
+          </div>
+        </div>
+
+        <p>
+          Vybraná provincie:{" "}
+          <strong>{selectedProvince?.name ?? "Žádná"}</strong>
+        </p>
+
+        {!selectedProvince && (
+          <p className="muted">
+            Vyber provincii na mapě.
+          </p>
+        )}
+
+        {selectedIsArmyLocation && (
+          <p className="muted">
+            Armáda se již nachází v této provincii.
+          </p>
+        )}
+
+        {selectedProvince && !selectedIsOwned && (
+          <p className="muted">
+            Do cizí provincie se běžným přesunem vydat nemůžeš.
+            Nepřátelské území musíš dobýt.
+          </p>
+        )}
+
+        {selectedProvince &&
+          selectedIsOwned &&
+          !selectedIsArmyLocation &&
+          !canMoveArmy && (
+            <p className="muted">
+              Tato provincie nesousedí s aktuální pozicí armády.
+            </p>
+          )}
+
+        <button
+          className="action-button"
+          onClick={moveArmy}
+          disabled={!canMoveArmy}
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            marginTop: "8px",
+            opacity: canMoveArmy ? 1 : 0.5,
+            cursor: canMoveArmy ? "pointer" : "not-allowed"
+          }}
+        >
+          <Move size={16} />
+          Přesunout armádu sem
+        </button>
+
+        <p className="muted" style={{ marginTop: "10px" }}>
+          Přesun je možný o jednu sousední vlastní provincii.
+          Samotný přesun nestojí zlato.
+        </p>
+      </section>
+    );
+  }
+
   function renderContent() {
     if (!player) return null;
 
@@ -725,14 +921,20 @@ export default function App() {
       case "map":
         return (
           <div className="map-layout">
-            <EuropeMap
-              provinces={gameProvinces}
-              countryColors={countryColors}
-              selectedProvince={save.selectedProvince}
-              onSelectProvince={id =>
-                updateSave({ selectedProvince: id })
-              }
-            />
+            <div>
+              <EuropeMap
+                provinces={gameProvinces}
+                countryColors={countryColors}
+                selectedProvince={save.selectedProvince}
+                onSelectProvince={id =>
+                  updateSave({ selectedProvince: id })
+                }
+                armyLocations={save.armyLocations}
+                armyCounts={armyCounts}
+              />
+
+              {renderArmyMovement()}
+            </div>
 
             <ProvincePanel
               province={selectedProvince}
@@ -768,6 +970,14 @@ export default function App() {
               <span>Velikost armády</span>
               <strong>
                 {playerArmy.toLocaleString("cs-CZ")}
+              </strong>
+            </div>
+
+            <div className="stat-card">
+              <MapPin />
+              <span>Pozice armády</span>
+              <strong>
+                {armyLocationProvince?.name ?? "Neznámá"}
               </strong>
             </div>
 
@@ -923,7 +1133,7 @@ export default function App() {
           <span className="eyebrow">HISTORICKÁ KAMPAŇ</span>
           <strong>{scenario.name}</strong>
         </div>
-        <span className="mode-label">VERZE 0.4.0</span>
+        <span className="mode-label">VERZE 0.5.0</span>
       </div>
 
       <div className="game-content">
@@ -944,7 +1154,7 @@ export default function App() {
 
       <footer className="game-footer">
         <span>© KORUNY EVROPY</span>
-        <span>Vývojová verze 0.4.0</span>
+        <span>Vývojová verze 0.5.0</span>
       </footer>
     </main>
   );
