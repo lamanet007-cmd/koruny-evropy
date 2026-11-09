@@ -1,4 +1,3 @@
-
 import { useRef, useState } from "react";
 import type { PointerEvent, WheelEvent } from "react";
 import type { Province } from "../data/scenarios";
