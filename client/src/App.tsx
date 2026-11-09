@@ -305,7 +305,7 @@ export default function App() {
         </div>
 
         <div className="selection-footer">
-          HISTORICKÁ KAMPAŇ · EVROPA 1066
+          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.3.0
         </div>
 
         <button
@@ -518,7 +518,7 @@ export default function App() {
           <span className="eyebrow">HISTORICKÁ KAMPAŇ</span>
           <strong>{scenario.name}</strong>
         </div>
-        <span className="mode-label">VERZE 0.2.0</span>
+        <span className="mode-label">VERZE 0.3.0</span>
       </div>
 
       <div className="game-content">
@@ -539,7 +539,7 @@ export default function App() {
 
       <footer className="game-footer">
         <span>© KORUNY EVROPY</span>
-        <span>Vývojová verze 0.2.0</span>
+        <span>Vývojová verze 0.3.0</span>
       </footer>
     </main>
   );
