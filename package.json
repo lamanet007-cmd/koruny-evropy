@@ -1,0 +1,15 @@
+{
+  "name": "koruny-evropy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Česká historická grand strategie 900–1950",
+  "scripts": {
+    "dev": "npm run dev --workspace client",
+    "build": "npm run build --workspace client && npm run build --workspace server",
+    "start": "npm run start --workspace server"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ]
+}
