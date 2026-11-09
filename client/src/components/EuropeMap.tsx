@@ -3,6 +3,16 @@ import { useRef, useState } from "react";
 import type { PointerEvent, WheelEvent } from "react";
 import type { Province } from "../data/scenarios";
 
+type ArmyMarker = {
+  id: string;
+  countryId: string;
+  provinceId: string;
+  count: number;
+  color: string;
+  label?: string;
+  selected?: boolean;
+};
+
 type Props = {
   provinces: Province[];
   countryColors: Record<string, string>;
@@ -10,6 +20,8 @@ type Props = {
   onSelectProvince: (id: string) => void;
   armyLocations: Record<string, string>;
   armyCounts: Record<string, number>;
+  armyMarkers?: ArmyMarker[];
+  onSelectArmy?: (id: string) => void;
 };
 
 const shapes: Record<string, string> = {
@@ -59,7 +71,9 @@ export default function EuropeMap({
   selectedProvince,
   onSelectProvince,
   armyLocations,
-  armyCounts
+  armyCounts,
+  armyMarkers = [],
+  onSelectArmy
 }: Props) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -91,7 +105,6 @@ export default function EuropeMap({
     if (event.button !== 0 && event.pointerType === "mouse") return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
-
     suppressClickRef.current = false;
 
     dragRef.current = {
@@ -106,7 +119,6 @@ export default function EuropeMap({
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
-
     if (!drag || drag.pointerId !== event.pointerId) return;
 
     const deltaX = event.clientX - drag.x;
@@ -127,13 +139,9 @@ export default function EuropeMap({
 
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
-
     if (!drag || drag.pointerId !== event.pointerId) return;
 
-    if (drag.moved) {
-      suppressClickRef.current = true;
-    }
-
+    if (drag.moved) suppressClickRef.current = true;
     dragRef.current = null;
   }
 
@@ -161,28 +169,47 @@ export default function EuropeMap({
     new Set(provinces.map(province => province.owner))
   );
 
-  const armiesOnMap = Object.entries(armyLocations)
+  const oldArmies = Object.entries(armyLocations)
     .map(([countryId, provinceId]) => {
-      const province = provinces.find(
-        item => item.id === provinceId
-      );
-
+      const province = provinces.find(item => item.id === provinceId);
       const position = positions[provinceId];
 
       if (!province || !position) return null;
 
       return {
+        id: `legacy-${countryId}`,
         countryId,
         provinceId,
         position,
         count: armyCounts[countryId] ?? 0,
-        color: countryColors[countryId] ?? "#777"
+        color: countryColors[countryId] ?? "#777",
+        label: countryNames[countryId] ?? countryId,
+        selected: false
       };
     })
     .filter(
       (army): army is NonNullable<typeof army> =>
         army !== null && army.count > 0
     );
+
+  const separateArmies = armyMarkers
+    .map(army => {
+      const province = provinces.find(item => item.id === army.provinceId);
+      const position = positions[army.provinceId];
+
+      if (!province || !position) return null;
+
+      return {
+        ...army,
+        position
+      };
+    })
+    .filter(
+      (army): army is NonNullable<typeof army> =>
+        army !== null && army.count >= 0
+    );
+
+  const armiesOnMap = [...oldArmies, ...separateArmies];
 
   return (
     <section className="map-panel">
@@ -322,10 +349,8 @@ export default function EuropeMap({
             <text x="530" y="90">SKANDINÁVIE</text>
           </g>
 
-          {/* Provincie */}
           {provinces.map(province => {
             const shape = shapes[province.id];
-
             if (!shape) return null;
 
             const active = selectedProvince === province.id;
@@ -372,49 +397,84 @@ export default function EuropeMap({
             );
           })}
 
-          {/* Armády */}
-          <g pointerEvents="none">
-            {armiesOnMap.map(army => (
-              <g
-                key={army.countryId}
-                transform={`translate(${army.position.x + 20} ${army.position.y - 25})`}
-              >
-                <circle
-                  r="18"
-                  fill="#2c241b"
-                  stroke="#e7d3a4"
-                  strokeWidth="2.5"
-                />
-                <circle
-                  r="14"
-                  fill={army.color}
-                  stroke="#fff0c9"
-                  strokeWidth="1"
-                />
-                <path
-                  d="M0 -9 L7 -5 L6 5 L0 10 L-6 5 L-7 -5 Z"
-                  fill="#f4e6c3"
-                  stroke="#392b1d"
-                  strokeWidth="1"
-                />
-                <text
-                  x="0"
-                  y="29"
-                  textAnchor="middle"
-                  fontSize="12"
-                  fontWeight="bold"
-                  fill="#fff4d7"
-                  stroke="#34291c"
-                  strokeWidth="3"
-                  paintOrder="stroke"
+          {/* Samostatné armády a armády ostatních států */}
+          <g>
+            {armiesOnMap.map((army, index) => {
+              const sameProvince = armiesOnMap
+                .slice(0, index)
+                .filter(item => item.provinceId === army.provinceId).length;
+
+              const x = army.position.x + 20 + (sameProvince % 3) * 28;
+              const y = army.position.y - 25 + Math.floor(sameProvince / 3) * 28;
+
+              return (
+                <g
+                  key={army.id}
+                  transform={`translate(${x} ${y})`}
+                  style={{
+                    cursor: army.id.startsWith("legacy-") ? "default" : "pointer"
+                  }}
+                  onClick={event => {
+                    event.stopPropagation();
+                    if (!army.id.startsWith("legacy-")) {
+                      onSelectArmy?.(army.id);
+                    }
+                  }}
                 >
-                  {army.count.toLocaleString("cs-CZ")}
-                </text>
-              </g>
-            ))}
+                  {army.selected && (
+                    <circle
+                      r="24"
+                      fill="none"
+                      stroke="#ffe28b"
+                      strokeWidth="3"
+                      strokeDasharray="4 3"
+                    />
+                  )}
+
+                  <circle
+                    r="18"
+                    fill="#2c241b"
+                    stroke={army.selected ? "#ffe28b" : "#e7d3a4"}
+                    strokeWidth={army.selected ? 4 : 2.5}
+                  />
+
+                  <circle
+                    r="14"
+                    fill={army.color}
+                    stroke="#fff0c9"
+                    strokeWidth="1"
+                  />
+
+                  <path
+                    d="M0 -9 L7 -5 L6 5 L0 10 L-6 5 L-7 -5 Z"
+                    fill="#f4e6c3"
+                    stroke="#392b1d"
+                    strokeWidth="1"
+                  />
+
+                  <text
+                    x="0"
+                    y="29"
+                    textAnchor="middle"
+                    fontSize="12"
+                    fontWeight="bold"
+                    fill="#fff4d7"
+                    stroke="#34291c"
+                    strokeWidth="3"
+                    paintOrder="stroke"
+                    pointerEvents="none"
+                  >
+                    {army.count.toLocaleString("cs-CZ")}
+                  </text>
+
+                  {army.label && (
+                    <title>{army.label}</title>
+                  )}
+                </g>
+              );
+            })}
           </g>
 
-          {/* Kompas */}
           <g transform="translate(910 100)" pointerEvents="none">
             <circle
               r="38"
@@ -491,6 +551,7 @@ export default function EuropeMap({
         }}
       >
         Přibližování: tlačítka nebo kolečko myši · Posouvání: tažením prstem
+        · Výběr armády: klepnutím na její značku
       </div>
     </section>
   );
