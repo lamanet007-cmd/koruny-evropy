@@ -1,3 +1,4 @@
+
 @import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Crimson+Text:wght@400;600;700&display=swap");
 
 :root {
@@ -17,6 +18,11 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--dark);
 }
 
 body {
@@ -468,6 +474,235 @@ button:focus-visible {
   letter-spacing: 1px;
 }
 
+/* =========================================
+   VÝBĚR STÁTU – NOVÁ KAMPAŇ
+========================================= */
+
+.country-selection {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 36px 18px 28px;
+  color: #eadbb9;
+  background:
+    radial-gradient(ellipse at 50% 0%, #55402b 0%, transparent 55%),
+    linear-gradient(145deg, #17130f, #292017 55%, #17130f);
+  text-align: center;
+  overflow-x: hidden;
+}
+
+.selection-top {
+  max-width: 680px;
+  margin: 0 auto 42px;
+}
+
+.selection-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 18px;
+  border: 1px solid #b28b48;
+  border-radius: 50%;
+  color: #d7b36d;
+  background: #332619;
+  box-shadow: 0 0 35px #0008;
+}
+
+.selection-top h1 {
+  margin: 10px 0 4px;
+  color: #e5c582;
+  font-family: "Cinzel", serif;
+  font-size: clamp(30px, 7vw, 48px);
+  letter-spacing: 3px;
+}
+
+.selection-subtitle {
+  margin: 8px 0;
+  color: #c3a36a;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.selection-description {
+  max-width: 520px;
+  margin: 18px auto 0;
+  color: #c5b99f;
+  line-height: 1.7;
+}
+
+.selection-heading {
+  margin: 0 auto 22px;
+}
+
+.selection-heading h2 {
+  margin: 8px 0;
+  color: #ead5a6;
+  font-family: "Cinzel", serif;
+  font-size: clamp(23px, 5vw, 32px);
+}
+
+.selection-heading p {
+  color: #b8aa91;
+}
+
+.country-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 245px), 1fr)
+  );
+  gap: 16px;
+  max-width: 1050px;
+  margin: 0 auto;
+}
+
+.country-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 23px 17px;
+  border: 1px solid #725b3b;
+  border-top: 4px solid;
+  border-radius: 10px;
+  color: #e8d8b8;
+  background: linear-gradient(155deg, #3b2d20, #211a14);
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.country-choice:hover {
+  transform: translateY(-3px);
+  border-color: #d0ad6d;
+}
+
+.country-choice:active {
+  transform: scale(0.98);
+}
+
+.choice-color {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 16px;
+  border: 2px solid #e1c58e;
+  border-radius: 50%;
+  color: #fff0ce;
+}
+
+.country-choice h3 {
+  margin: 9px 0;
+  color: #f0d49a;
+  font-family: "Cinzel", serif;
+  font-size: 21px;
+}
+
+.choice-ruler {
+  margin: 4px 0 18px;
+  color: #c5b79d;
+}
+
+.choice-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  padding: 14px 0;
+  border-top: 1px solid #6b5538;
+  border-bottom: 1px solid #6b5538;
+  color: #d3c3a4;
+  text-align: left;
+}
+
+.choice-stats span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.choice-button {
+  display: block;
+  width: 100%;
+  margin-top: 17px;
+  padding: 12px 8px;
+  border: 1px solid #a9894d;
+  border-radius: 5px;
+  color: #f4dfb1;
+  background: #604525;
+  font-weight: 700;
+}
+
+.selection-footer {
+  margin: 38px auto 8px;
+  color: #927c58;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+/* =========================================
+   HERNÍ LIŠTA A CELOOBRAZOVKOVÝ REŽIM
+========================================= */
+
+.game-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 14px;
+  background: #211a14;
+  border-bottom: 1px solid #725b3b;
+}
+
+.toolbar-button,
+.fullscreen-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #806541;
+  border-radius: 6px;
+  color: #ead8b3;
+  background: #3b2d20;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fullscreen-button:hover,
+.toolbar-button:hover {
+  background: #594329;
+}
+
+.selection-fullscreen {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.fullscreen-message {
+  padding: 10px;
+  color: #f0d49a;
+  text-align: center;
+  font-size: 13px;
+}
+
+.country-choice:focus-visible,
+.fullscreen-button:focus-visible,
+.toolbar-button:focus-visible {
+  outline: 3px solid #e5c582;
+  outline-offset: 3px;
+}
+
+/* =========================================
+   MOBILNÍ ZOBRAZENÍ
+========================================= */
+
 @media (max-width: 760px) {
   .game-shell {
     padding-bottom: calc(75px + env(safe-area-inset-bottom));
@@ -579,7 +814,40 @@ button:focus-visible {
     padding: 14px;
     font-size: 10px;
   }
+
+  /* Výběr státu na mobilu */
+
+  .country-selection {
+    padding: 68px 13px 22px;
+  }
+
+  .selection-top {
+    margin-bottom: 30px;
+  }
+
+  .country-selection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .country-choice {
+    padding: 19px 15px;
+  }
+
+  .game-toolbar {
+    padding: 7px 9px;
+  }
+
+  .toolbar-button,
+  .fullscreen-button {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
 }
+
+/* =========================================
+   MOBIL NA ŠÍŘKU
+========================================= */
 
 @media (orientation: landscape) and (max-height: 550px) {
   .game-header {
@@ -607,5 +875,32 @@ button:focus-visible {
 
   .game-shell > .bottom-navigation {
     position: static;
+  }
+}
+
+/* =========================================
+   PROHLÍŽEČOVÝ FULLSCREEN
+========================================= */
+
+:fullscreen {
+  background: #17130f;
+}
+
+:fullscreen .game-shell,
+:fullscreen .country-selection {
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-y: auto;
+}
+
+/* Omezení animací pro přístupnost */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
