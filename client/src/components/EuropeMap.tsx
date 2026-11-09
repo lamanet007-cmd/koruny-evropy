@@ -8,6 +8,8 @@ type Props = {
   countryColors: Record<string, string>;
   selectedProvince: string;
   onSelectProvince: (id: string) => void;
+  armyLocations: Record<string, string>;
+  armyCounts: Record<string, number>;
 };
 
 const shapes: Record<string, string> = {
@@ -55,10 +57,13 @@ export default function EuropeMap({
   provinces,
   countryColors,
   selectedProvince,
-  onSelectProvince
+  onSelectProvince,
+  armyLocations,
+  armyCounts
 }: Props) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const suppressClickRef = useRef(false);
 
   const dragRef = useRef<{
     pointerId: number;
@@ -87,6 +92,8 @@ export default function EuropeMap({
 
     event.currentTarget.setPointerCapture(event.pointerId);
 
+    suppressClickRef.current = false;
+
     dragRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -107,16 +114,25 @@ export default function EuropeMap({
 
     if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
       drag.moved = true;
+      suppressClickRef.current = true;
     }
 
-    setOffset({
-      x: drag.startX + deltaX,
-      y: drag.startY + deltaY
-    });
+    if (drag.moved) {
+      setOffset({
+        x: drag.startX + deltaX,
+        y: drag.startY + deltaY
+      });
+    }
   }
 
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
+    const drag = dragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (drag.moved) {
+      suppressClickRef.current = true;
+    }
 
     dragRef.current = null;
   }
@@ -132,9 +148,41 @@ export default function EuropeMap({
     );
   }
 
+  function selectProvince(id: string) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+
+    onSelectProvince(id);
+  }
+
   const owners = Array.from(
     new Set(provinces.map(province => province.owner))
   );
+
+  const armiesOnMap = Object.entries(armyLocations)
+    .map(([countryId, provinceId]) => {
+      const province = provinces.find(
+        item => item.id === provinceId
+      );
+
+      const position = positions[provinceId];
+
+      if (!province || !position) return null;
+
+      return {
+        countryId,
+        provinceId,
+        position,
+        count: armyCounts[countryId] ?? 0,
+        color: countryColors[countryId] ?? "#777"
+      };
+    })
+    .filter(
+      (army): army is NonNullable<typeof army> =>
+        army !== null && army.count > 0
+    );
 
   return (
     <section className="map-panel">
@@ -175,7 +223,7 @@ export default function EuropeMap({
         <svg
           viewBox="0 0 1000 700"
           role="img"
-          aria-label="Strategická mapa Evropy s provinciemi"
+          aria-label="Strategická mapa Evropy s provinciemi a armádami"
           style={{
             display: "block",
             width: "100%",
@@ -202,7 +250,6 @@ export default function EuropeMap({
 
           <rect width="1000" height="700" fill="#8da5a0" />
 
-          {/* Pevnina */}
           <g
             fill="#b7a47b"
             stroke="#65573f"
@@ -225,7 +272,6 @@ export default function EuropeMap({
             <path d="M770 510 L850 485 L930 510 L955 560 L900 595 L825 575 L780 545 Z" />
           </g>
 
-          {/* Textura pevniny */}
           <rect
             width="1000"
             height="700"
@@ -234,7 +280,6 @@ export default function EuropeMap({
             pointerEvents="none"
           />
 
-          {/* Hory */}
           <g
             fill="none"
             stroke="#87775c"
@@ -248,7 +293,6 @@ export default function EuropeMap({
             <path d="M520 180 Q610 170 680 210" />
           </g>
 
-          {/* Řeky */}
           <g
             fill="none"
             stroke="#668d91"
@@ -261,7 +305,6 @@ export default function EuropeMap({
             <path d="M600 275 Q640 300 660 340" />
           </g>
 
-          {/* Názvy oblastí */}
           <g
             fill="#5d4a32"
             fontSize="19"
@@ -291,11 +334,7 @@ export default function EuropeMap({
             return (
               <g
                 key={province.id}
-                onClick={() => {
-                  if (!dragRef.current?.moved) {
-                    onSelectProvince(province.id);
-                  }
-                }}
+                onClick={() => selectProvince(province.id)}
                 style={{ cursor: "pointer" }}
               >
                 <path
@@ -332,6 +371,48 @@ export default function EuropeMap({
               </g>
             );
           })}
+
+          {/* Armády */}
+          <g pointerEvents="none">
+            {armiesOnMap.map(army => (
+              <g
+                key={army.countryId}
+                transform={`translate(${army.position.x + 20} ${army.position.y - 25})`}
+              >
+                <circle
+                  r="18"
+                  fill="#2c241b"
+                  stroke="#e7d3a4"
+                  strokeWidth="2.5"
+                />
+                <circle
+                  r="14"
+                  fill={army.color}
+                  stroke="#fff0c9"
+                  strokeWidth="1"
+                />
+                <path
+                  d="M0 -9 L7 -5 L6 5 L0 10 L-6 5 L-7 -5 Z"
+                  fill="#f4e6c3"
+                  stroke="#392b1d"
+                  strokeWidth="1"
+                />
+                <text
+                  x="0"
+                  y="29"
+                  textAnchor="middle"
+                  fontSize="12"
+                  fontWeight="bold"
+                  fill="#fff4d7"
+                  stroke="#34291c"
+                  strokeWidth="3"
+                  paintOrder="stroke"
+                >
+                  {army.count.toLocaleString("cs-CZ")}
+                </text>
+              </g>
+            ))}
+          </g>
 
           {/* Kompas */}
           <g transform="translate(910 100)" pointerEvents="none">
