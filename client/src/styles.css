@@ -7,6 +7,7 @@
   background: #17140f;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+
   --gold: #c5a15b;
   --gold-light: #e4c77e;
   --dark: #17140f;
@@ -14,6 +15,10 @@
   --panel-light: #342b20;
   --border: #68543a;
   --muted: #b1a184;
+  --war: #a64236;
+  --war-light: #e28a70;
+  --peace: #607c4e;
+  --peace-light: #a9c18b;
 }
 
 * {
@@ -40,6 +45,11 @@ button {
 button:focus-visible {
   outline: 2px solid var(--gold-light);
   outline-offset: 3px;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .game-shell {
@@ -357,11 +367,13 @@ button:focus-visible {
 .country-color {
   width: 17px;
   height: 42px;
+  flex: 0 0 17px;
   border: 1px solid #bda77b;
 }
 
 .country-info {
   flex: 1;
+  min-width: 0;
   display: grid;
   gap: 3px;
 }
@@ -372,6 +384,10 @@ button:focus-visible {
 }
 
 .action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 8px 12px;
 }
 
@@ -700,6 +716,204 @@ button:focus-visible {
 }
 
 /* =========================================
+   VOJENSKÉ ROZHRANÍ – VERZE 0.4.1
+========================================= */
+
+.war-section {
+  display: grid;
+  gap: 22px;
+  margin-top: 34px;
+  padding-top: 25px;
+  border-top: 2px solid #80633e;
+}
+
+.war-section-heading {
+  display: grid;
+  gap: 7px;
+}
+
+.war-section-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  color: #ecd7a9;
+  font-family: "Cinzel", serif;
+  font-size: 20px;
+}
+
+.war-section-heading h3 svg {
+  color: var(--gold-light);
+}
+
+.war-section-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.war-list {
+  display: grid;
+  gap: 9px;
+}
+
+.war-country-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #59462f;
+  border-radius: 6px;
+  background:
+    linear-gradient(110deg, #34291e, #211a14);
+  transition: border-color 0.18s ease;
+}
+
+.war-country-card:has(.peace-button) {
+  border-color: #985047;
+  background:
+    linear-gradient(110deg, #442720, #241a15);
+}
+
+.war-country-card .country-color {
+  width: 8px;
+  min-height: 48px;
+  border-radius: 2px;
+}
+
+.war-country-card .country-info strong {
+  color: #f0dfb9;
+  font-family: "Cinzel", serif;
+  font-size: 13px;
+}
+
+.war-country-card .country-info small {
+  font-size: 12px;
+}
+
+.war-country-card .country-info span {
+  font-size: 12px;
+}
+
+.war-button {
+  border-color: #b45c4d;
+  background: linear-gradient(#98483b, #60291f);
+  color: #ffe1d5;
+  white-space: nowrap;
+}
+
+.war-button:hover {
+  filter: brightness(1.2);
+}
+
+.peace-button {
+  border-color: #78905b;
+  background: linear-gradient(#647c4b, #394b2d);
+  color: #e7f2d6;
+  white-space: nowrap;
+}
+
+.battle-section {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #8c573d;
+  border-radius: 7px;
+  background:
+    radial-gradient(ellipse at top right, #59332655, transparent 65%),
+    linear-gradient(145deg, #30231b, #1d1813);
+}
+
+.battle-section > .muted {
+  margin: 0;
+}
+
+.war-target-group {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #624b34;
+}
+
+.war-target-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #e5c582;
+  font-family: "Cinzel", serif;
+  font-size: 14px;
+}
+
+.war-target-title svg {
+  color: var(--war-light);
+}
+
+.battle-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #5e4932;
+  border-radius: 5px;
+  background: #1c1712;
+}
+
+.battle-target-info {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.battle-target-info strong {
+  color: #f0dfb9;
+  font-family: "Cinzel", serif;
+  font-size: 14px;
+}
+
+.battle-target-info small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attack-button {
+  flex: 0 0 auto;
+  border-color: #bd7153;
+  background: linear-gradient(#a65a40, #673421);
+  color: #fff0d8;
+  white-space: nowrap;
+}
+
+.attack-button:hover {
+  filter: brightness(1.22);
+}
+
+.war-rules {
+  margin: 0;
+  padding: 13px;
+  border-left: 3px solid #a36d42;
+  background: #211912;
+  font-size: 13px;
+}
+
+/* =========================================
+   HOSPODÁŘSKÉ A VOJENSKÉ STATISTIKY
+========================================= */
+
+.stat-card {
+  border-radius: 5px;
+}
+
+.content-panel > .stat-card {
+  margin-top: 12px;
+}
+
+.stat-card strong {
+  overflow-wrap: anywhere;
+}
+
+/* =========================================
    MOBILNÍ ZOBRAZENÍ
 ========================================= */
 
@@ -815,8 +1029,6 @@ button:focus-visible {
     font-size: 10px;
   }
 
-  /* Výběr státu na mobilu */
-
   .country-selection {
     padding: 68px 13px 22px;
   }
@@ -841,6 +1053,60 @@ button:focus-visible {
   .fullscreen-button {
     min-height: 44px;
     padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  /* Vojenské rozhraní na telefonu */
+
+  .war-section {
+    gap: 17px;
+    margin-top: 27px;
+    padding-top: 20px;
+  }
+
+  .war-section-heading h3 {
+    font-size: 17px;
+  }
+
+  .war-country-card {
+    gap: 9px;
+    padding: 10px;
+  }
+
+  .war-country-card .country-info strong {
+    font-size: 12px;
+  }
+
+  .war-country-card .country-info span {
+    font-size: 11px;
+  }
+
+  .war-country-card .action-button {
+    min-height: 40px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+
+  .battle-section {
+    padding: 13px;
+  }
+
+  .battle-target {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 11px;
+  }
+
+  .battle-target-info {
+    flex: 1 1 130px;
+  }
+
+  .attack-button {
+    width: 100%;
+    min-height: 43px;
+  }
+
+  .war-rules {
     font-size: 12px;
   }
 }
@@ -876,6 +1142,10 @@ button:focus-visible {
   .game-shell > .bottom-navigation {
     position: static;
   }
+
+  .war-country-card {
+    padding: 9px;
+  }
 }
 
 /* =========================================
@@ -893,7 +1163,9 @@ button:focus-visible {
   overflow-y: auto;
 }
 
-/* Omezení animací pro přístupnost */
+/* =========================================
+   PŘÍSTUPNOST
+========================================= */
 
 @media (prefers-reduced-motion: reduce) {
   *,
