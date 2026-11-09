@@ -49,6 +49,18 @@ type SaveData = {
   armyLocations: Record<string, string>;
 };
 
+function createInitialArmyLocations(): Record<string, string> {
+  return Object.fromEntries(
+    scenario1066.countries.map(country => {
+      const province = scenario1066.provinces.find(
+        item => item.owner === country.id
+      );
+
+      return [country.id, province?.id ?? ""];
+    })
+  );
+}
+
 function createInitialSave(): SaveData {
   return {
     year: scenario1066.year,
@@ -62,20 +74,8 @@ function createInitialSave(): SaveData {
     armies: {},
     provinceOwners: {},
     wars: [],
-    armyLocations: {}
+    armyLocations: createInitialArmyLocations()
   };
-}
-
-function createInitialArmyLocations(): Record<string, string> {
-  return Object.fromEntries(
-    scenario1066.countries.map(country => {
-      const province = scenario1066.provinces.find(
-        item => item.owner === country.id
-      );
-
-      return [country.id, province?.id ?? ""];
-    })
-  );
 }
 
 function readSave(): SaveData {
@@ -94,8 +94,10 @@ function readSave(): SaveData {
         wars: parsed.wars ?? [],
         relations: parsed.relations ?? {},
         log: parsed.log ?? [],
-        armyLocations:
-          parsed.armyLocations ?? createInitialArmyLocations()
+        armyLocations: {
+          ...createInitialArmyLocations(),
+          ...(parsed.armyLocations ?? {})
+        }
       };
     }
   } catch {
@@ -179,7 +181,11 @@ export default function App() {
   );
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+    } catch {
+      // Hra pokračuje i v případě nedostupného úložiště.
+    }
   }, [save]);
 
   useEffect(() => {
@@ -349,7 +355,6 @@ export default function App() {
     );
   }
 
-  // Přesun armády do sousední vlastní provincie.
   function moveArmy() {
     if (!player || !selectedProvince) return;
 
@@ -376,7 +381,6 @@ export default function App() {
     );
   }
 
-  // Vyhlášení války.
   function declareWar(countryId: string) {
     if (!player) return;
 
@@ -409,7 +413,6 @@ export default function App() {
     );
   }
 
-  // Uzavření míru.
   function makePeace(countryId: string) {
     if (!player) return;
 
@@ -445,7 +448,6 @@ export default function App() {
     );
   }
 
-  // Výpočet a vyhodnocení bitvy.
   function attackProvince(province: Province) {
     if (!player) return;
 
@@ -527,8 +529,6 @@ export default function App() {
       newProvinceOwners[currentProvince.id] = player.id;
       newArmyLocations[player.id] = currentProvince.id;
 
-      // Pokud se zde nacházela nepřátelská armáda,
-      // přesune se do jiné zbývající provincie svého státu.
       if (newArmyLocations[enemyId] === currentProvince.id) {
         const enemyRemainingProvince = gameProvinces.find(
           item =>
@@ -813,7 +813,8 @@ export default function App() {
   function renderArmyMovement() {
     if (!player) return null;
 
-    const currentLocation = armyLocationProvince?.name ?? "Neznámá provincie";
+    const currentLocation =
+      armyLocationProvince?.name ?? "Neznámá provincie";
 
     return (
       <section
