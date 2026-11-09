@@ -1,1 +1,0 @@
-# koruny-evropy
