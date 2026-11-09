@@ -15,7 +15,10 @@ import {
   Crosshair,
   HeartHandshake,
   Move,
-  MapPin
+  MapPin,
+  TrendingUp,
+  TrendingDown,
+  CalendarDays
 } from "lucide-react";
 
 import GameHeader from "./components/GameHeader";
@@ -180,6 +183,31 @@ export default function App() {
     armyLocationProvince?.neighbors.includes(selectedProvince.id)
   );
 
+  // Základní příjem státu zůstává zachován.
+  // Dobyté provincie přidávají svůj daňový výnos.
+  const conqueredProvinceIncome = player
+    ? gameProvinces
+        .filter(
+          province =>
+            province.owner === player.id &&
+            scenario.provinces.find(
+              original => original.id === province.id
+            )?.owner !== player.id
+        )
+        .reduce((sum, province) => sum + province.tax, 0)
+    : 0;
+
+  const yearlyIncome = player
+    ? player.income + conqueredProvinceIncome
+    : 0;
+
+  // Údržba armády: 5 zlatých za každých započatých 1 000 mužů.
+  const yearlyExpenses = player
+    ? Math.ceil(playerArmy / 1000) * 5
+    : 0;
+
+  const yearlyBalance = yearlyIncome - yearlyExpenses;
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
@@ -303,18 +331,28 @@ export default function App() {
     return save.armies[countryId] ?? country?.army ?? 0;
   }
 
+  // Každoroční hospodářský cyklus.
   function nextYear() {
     if (!player) return;
 
     const newYear = save.year + 1;
-    const yearlyIncome = player.income;
+    const income = yearlyIncome;
+    const expenses = yearlyExpenses;
+    const balance = income - expenses;
+    const newTreasury = save.treasury + balance;
+
+    const message =
+      `Rok ${newYear}: příjmy ${income} zl., ` +
+      `vojenské výdaje ${expenses} zl., ` +
+      `hospodářský výsledek ${balance >= 0 ? "+" : ""}${balance} zl. ` +
+      `Pokladna: ${newTreasury} zl.`;
 
     updateSave(
       {
         year: newYear,
-        treasury: save.treasury + yearlyIncome
+        treasury: newTreasury
       },
-      `Rok ${newYear}: státní pokladna obdržela ${yearlyIncome} zlatých.`
+      message
     );
   }
 
@@ -649,7 +687,7 @@ export default function App() {
         </div>
 
         <div className="selection-footer">
-          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.5.0
+          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.6.0
         </div>
 
         <button
@@ -915,6 +953,133 @@ export default function App() {
     );
   }
 
+  function renderEconomy() {
+    if (!player) return null;
+
+    const ownedProvinceCount = gameProvinces.filter(
+      province => province.owner === player.id
+    ).length;
+
+    return (
+      <section className="content-panel">
+        <span className="eyebrow">HOSPODÁŘSTVÍ ŘÍŠE</span>
+        <h2><Coins /> Státní pokladna</h2>
+
+        <div className="economy-grid">
+          <div className="stat-card">
+            <Coins />
+            <span>Aktuální pokladna</span>
+            <strong>
+              {save.treasury.toLocaleString("cs-CZ")} zl.
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <TrendingUp />
+            <span>Roční příjmy</span>
+            <strong>
+              +{yearlyIncome.toLocaleString("cs-CZ")} zl.
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <TrendingDown />
+            <span>Roční výdaje</span>
+            <strong>
+              -{yearlyExpenses.toLocaleString("cs-CZ")} zl.
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <CalendarDays />
+            <span>Čistý roční výsledek</span>
+            <strong
+              style={{
+                color: yearlyBalance >= 0 ? "#79b879" : "#d87965"
+              }}
+            >
+              {yearlyBalance >= 0 ? "+" : ""}
+              {yearlyBalance.toLocaleString("cs-CZ")} zl.
+            </strong>
+          </div>
+        </div>
+
+        <div className="economy-breakdown">
+          <h3>Roční hospodářský rozpočet</h3>
+
+          <div className="country-row">
+            <div className="country-info">
+              <strong>Základní příjem státu</strong>
+              <small>Výchozí státní příjmy</small>
+            </div>
+            <strong>+{player.income} zl.</strong>
+          </div>
+
+          <div className="country-row">
+            <div className="country-info">
+              <strong>Daně z dobytých provincií</strong>
+              <small>
+                {ownedProvinceCount} vlastněných provincií
+              </small>
+            </div>
+            <strong>+{conqueredProvinceIncome} zl.</strong>
+          </div>
+
+          <div className="country-row">
+            <div className="country-info">
+              <strong>Údržba armády</strong>
+              <small>
+                {playerArmy.toLocaleString("cs-CZ")} mužů
+              </small>
+            </div>
+            <strong>-{yearlyExpenses} zl.</strong>
+          </div>
+
+          <div className="country-row economy-total">
+            <div className="country-info">
+              <strong>Roční hospodářský výsledek</strong>
+            </div>
+            <strong>
+              {yearlyBalance >= 0 ? "+" : ""}
+              {yearlyBalance} zl.
+            </strong>
+          </div>
+        </div>
+
+        <div className="economy-explanation">
+          <p>
+            <strong>Daňové příjmy:</strong> Každá provincie
+            dobytá během kampaně přidává svůj daňový výnos
+            k základnímu příjmu tvého státu.
+          </p>
+
+          <p>
+            <strong>Vojenská údržba:</strong> Za každých
+            započatých 1 000 vojáků zaplatíš 5 zlatých ročně.
+          </p>
+
+          <p>
+            <strong>Dluh:</strong> Pokud výdaje převýší příjmy,
+            může se pokladna dostat do záporných hodnot.
+          </p>
+        </div>
+
+        <button
+          className="action-button"
+          onClick={nextYear}
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            marginTop: "18px"
+          }}
+        >
+          <CalendarDays size={17} />
+          Uzavřít rok {save.year} a pokračovat do roku {save.year + 1}
+        </button>
+      </section>
+    );
+  }
+
   function renderContent() {
     if (!player) return null;
 
@@ -1027,37 +1192,7 @@ export default function App() {
         );
 
       case "economy":
-        return (
-          <section className="content-panel">
-            <span className="eyebrow">HOSPODÁŘSTVÍ</span>
-            <h2><Coins /> Státní pokladna</h2>
-
-            <div className="economy-grid">
-              <div className="stat-card">
-                <Coins />
-                <span>Pokladna</span>
-                <strong>
-                  {save.treasury.toLocaleString("cs-CZ")}
-                </strong>
-              </div>
-
-              <div className="stat-card">
-                <span>Roční příjem</span>
-                <strong>+{player.income}</strong>
-              </div>
-
-              <div className="stat-card">
-                <span>Roční výdaje</span>
-                <strong>0</strong>
-              </div>
-            </div>
-
-            <p className="muted">
-              Vojenské tažení stojí 100 zlatých za útok.
-              Vyhlášení války stojí 150 zlatých.
-            </p>
-          </section>
-        );
+        return renderEconomy();
 
       case "chronicle":
         return (
@@ -1124,7 +1259,7 @@ export default function App() {
         year={save.year}
         countryName={player.name}
         treasury={save.treasury}
-        income={player.income}
+        income={yearlyBalance}
         army={playerArmy}
         onNextTurn={nextYear}
       />
@@ -1134,7 +1269,7 @@ export default function App() {
           <span className="eyebrow">HISTORICKÁ KAMPAŇ</span>
           <strong>{scenario.name}</strong>
         </div>
-        <span className="mode-label">VERZE 0.5.0</span>
+        <span className="mode-label">VERZE 0.6.0</span>
       </div>
 
       <div className="game-content">
@@ -1155,7 +1290,7 @@ export default function App() {
 
       <footer className="game-footer">
         <span>© KORUNY EVROPY</span>
-        <span>Vývojová verze 0.5.0</span>
+        <span>Vývojová verze 0.6.0</span>
       </footer>
     </main>
   );
