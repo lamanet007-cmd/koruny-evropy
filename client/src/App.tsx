@@ -9,7 +9,11 @@ import {
   Maximize2,
   Minimize2,
   Shield,
-  ArrowLeft
+  ArrowLeft,
+  Swords,
+  Flag,
+  Crosshair,
+  HeartHandshake
 } from "lucide-react";
 
 import GameHeader from "./components/GameHeader";
@@ -37,6 +41,11 @@ type SaveData = {
   tab: GameTab;
   log: string[];
   started: boolean;
+
+  // Nové údaje pro vojenský systém.
+  armies: Record<string, number>;
+  provinceOwners: Record<string, string>;
+  wars: string[];
 };
 
 function createInitialSave(): SaveData {
@@ -48,7 +57,10 @@ function createInitialSave(): SaveData {
     selectedProvince: "prague",
     tab: "map",
     log: [],
-    started: false
+    started: false,
+    armies: {},
+    provinceOwners: {},
+    wars: []
   };
 }
 
@@ -57,9 +69,17 @@ function readSave(): SaveData {
     const raw = localStorage.getItem(STORAGE_KEY);
 
     if (raw) {
+      const parsed = JSON.parse(raw);
+      const initial = createInitialSave();
+
       return {
-        ...createInitialSave(),
-        ...JSON.parse(raw)
+        ...initial,
+        ...parsed,
+        armies: parsed.armies ?? {},
+        provinceOwners: parsed.provinceOwners ?? {},
+        wars: parsed.wars ?? [],
+        relations: parsed.relations ?? {},
+        log: parsed.log ?? []
       };
     }
   } catch {
@@ -80,9 +100,24 @@ export default function App() {
     country => country.id === save.countryId
   );
 
-  const selectedProvince = scenario.provinces.find(
+  // Dynamické vlastnictví provincií.
+  // Díky tomu se po dobytí změní barva provincie na mapě.
+  const gameProvinces = useMemo(
+    () =>
+      scenario.provinces.map(province => ({
+        ...province,
+        owner: save.provinceOwners[province.id] ?? province.owner
+      })),
+    [scenario.provinces, save.provinceOwners]
+  );
+
+  const selectedProvince = gameProvinces.find(
     province => province.id === save.selectedProvince
   );
+
+  const playerArmy = player
+    ? save.armies[player.id] ?? player.army
+    : 0;
 
   const countryColors = useMemo(
     () =>
@@ -142,7 +177,7 @@ export default function App() {
       ...current,
       ...updates,
       log: message
-        ? [message, ...current.log].slice(0, 30)
+        ? [message, ...current.log].slice(0, 50)
         : current.log
     }));
   }
@@ -150,6 +185,20 @@ export default function App() {
   function startGame(country: Country) {
     const firstProvince = scenario.provinces.find(
       province => province.owner === country.id
+    );
+
+    const armies = Object.fromEntries(
+      scenario.countries.map(item => [
+        item.id,
+        item.army
+      ])
+    );
+
+    const provinceOwners = Object.fromEntries(
+      scenario.provinces.map(province => [
+        province.id,
+        province.owner
+      ])
     );
 
     setSave({
@@ -162,13 +211,16 @@ export default function App() {
       log: [
         `Rok ${scenario.year}: začíná vláda státu ${country.name}.`
       ],
-      started: true
+      started: true,
+      armies,
+      provinceOwners,
+      wars: []
     });
   }
 
   function returnToCountrySelection() {
     const confirmed = window.confirm(
-      "Chceš se vrátit na výběr státu? Neuložený postup této kampaně bude nahrazen novou hrou."
+      "Chceš se vrátit na výběr státu? Postup této kampaně bude nahrazen novou hrou."
     );
 
     if (!confirmed) return;
@@ -184,6 +236,14 @@ export default function App() {
         country => country.id === province.owner
       )?.name ?? "Neznámý držitel"
     );
+  }
+
+  function getArmy(countryId: string) {
+    const country = scenario.countries.find(
+      item => item.id === countryId
+    );
+
+    return save.armies[countryId] ?? country?.army ?? 0;
   }
 
   function nextYear() {
@@ -203,6 +263,14 @@ export default function App() {
 
   function improveRelations(countryId: string) {
     if (!player) return;
+
+    if (save.wars.includes(countryId)) {
+      updateSave(
+        {},
+        "Diplomatickou misi nelze vyslat do země, se kterou právě válčíš."
+      );
+      return;
+    }
 
     const currentValue = save.relations[countryId] ?? 0;
 
@@ -228,6 +296,190 @@ export default function App() {
       },
       `Do země ${target?.name ?? countryId} byla vyslána diplomatická mise.`
     );
+  }
+
+  // Vyhlášení války.
+  function declareWar(countryId: string) {
+    if (!player) return;
+
+    if (save.wars.includes(countryId)) return;
+
+    const enemy = scenario.countries.find(
+      country => country.id === countryId
+    );
+
+    if (!enemy) return;
+
+    if (save.treasury < 150) {
+      updateSave(
+        {},
+        "Válku nelze vyhlásit: potřebuješ alespoň 150 zlatých."
+      );
+      return;
+    }
+
+    updateSave(
+      {
+        treasury: save.treasury - 150,
+        wars: [...save.wars, countryId],
+        relations: {
+          ...save.relations,
+          [countryId]: -100
+        }
+      },
+      `Rok ${save.year}: ${player.name} vyhlásilo válku státu ${enemy.name}!`
+    );
+  }
+
+  // Uzavření míru.
+  function makePeace(countryId: string) {
+    if (!player) return;
+
+    const enemy = scenario.countries.find(
+      country => country.id === countryId
+    );
+
+    if (!enemy) return;
+
+    updateSave(
+      {
+        wars: save.wars.filter(id => id !== countryId),
+        relations: {
+          ...save.relations,
+          [countryId]: -25
+        }
+      },
+      `Rok ${save.year}: byl uzavřen mír mezi státem ${player.name} a zemí ${enemy.name}.`
+    );
+  }
+
+  // Zjištění, zda je provincie dosažitelná z vlastního území.
+  function canAttackProvince(province: Province) {
+    if (!player) return false;
+
+    if (!save.wars.includes(province.owner)) return false;
+
+    const ownedProvinceIds = gameProvinces
+      .filter(item => item.owner === player.id)
+      .map(item => item.id);
+
+    return province.neighbors.some(
+      neighborId => ownedProvinceIds.includes(neighborId)
+    );
+  }
+
+  // Výpočet a vyhodnocení bitvy.
+  function attackProvince(province: Province) {
+    if (!player) return;
+
+    const currentProvince = gameProvinces.find(
+      item => item.id === province.id
+    );
+
+    if (!currentProvince) return;
+
+    if (!save.wars.includes(currentProvince.owner)) {
+      updateSave(
+        {},
+        "Na toto území nelze zaútočit: nejprve musíš být ve válce s jeho držitelem."
+      );
+      return;
+    }
+
+    if (!canAttackProvince(currentProvince)) {
+      updateSave(
+        {},
+        "Útok není možný: provincie nesousedí s tvým územím."
+      );
+      return;
+    }
+
+    const enemyId = currentProvince.owner;
+    const enemy = scenario.countries.find(
+      country => country.id === enemyId
+    );
+
+    if (!enemy) return;
+
+    const attackingArmy = getArmy(player.id);
+    const defendingArmy = getArmy(enemyId);
+
+    if (attackingArmy < 500) {
+      updateSave(
+        {},
+        "Armáda je příliš slabá. Potřebuješ alespoň 500 mužů."
+      );
+      return;
+    }
+
+    if (save.treasury < 100) {
+      updateSave(
+        {},
+        "Nemáš dostatek zlata na zásobování vojenského tažení. Potřebuješ 100 zlatých."
+      );
+      return;
+    }
+
+    const attackPower =
+      attackingArmy * (0.75 + Math.random() * 0.5);
+
+    const defensePower =
+      defendingArmy * (0.55 + Math.random() * 0.4) +
+      currentProvince.development * 250;
+
+    const victory = attackPower >= defensePower;
+
+    const newArmies = { ...save.armies };
+
+    let newProvinceOwners = { ...save.provinceOwners };
+
+    if (victory) {
+      const attackerLosses = Math.round(attackingArmy * 0.18);
+      const defenderLosses = Math.round(defendingArmy * 0.3);
+
+      newArmies[player.id] = Math.max(
+        0,
+        attackingArmy - attackerLosses
+      );
+
+      newArmies[enemyId] = Math.max(
+        0,
+        defendingArmy - defenderLosses
+      );
+
+      newProvinceOwners[currentProvince.id] = player.id;
+
+      updateSave(
+        {
+          treasury: save.treasury - 100,
+          armies: newArmies,
+          provinceOwners: newProvinceOwners,
+          selectedProvince: currentProvince.id
+        },
+        `VÍTĚZSTVÍ! Vojska státu ${player.name} dobyla provincii ${currentProvince.name}. Ztráty: ${attackerLosses} mužů.`
+      );
+    } else {
+      const attackerLosses = Math.round(attackingArmy * 0.3);
+      const defenderLosses = Math.round(defendingArmy * 0.12);
+
+      newArmies[player.id] = Math.max(
+        0,
+        attackingArmy - attackerLosses
+      );
+
+      newArmies[enemyId] = Math.max(
+        0,
+        defendingArmy - defenderLosses
+      );
+
+      updateSave(
+        {
+          treasury: save.treasury - 100,
+          armies: newArmies
+        },
+        `PORÁŽKA! Útok na provincii ${currentProvince.name} selhal. Ztráty tvé armády: ${attackerLosses} mužů.`
+      );
+    }
   }
 
   function renderCountrySelection() {
@@ -305,7 +557,7 @@ export default function App() {
         </div>
 
         <div className="selection-footer">
-          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.3.0
+          HISTORICKÁ KAMPAŇ · EVROPA 1066 · VERZE 0.4.0
         </div>
 
         <button
@@ -328,6 +580,144 @@ export default function App() {
     );
   }
 
+  function renderWarSection() {
+    if (!player) return null;
+
+    return (
+      <section className="war-section">
+        <div className="war-section-heading">
+          <span className="eyebrow">VOJENSKÁ DIPLOMACIE</span>
+          <h3><Swords /> Války a konflikty</h3>
+          <p>
+            Tvá armáda má {playerArmy.toLocaleString("cs-CZ")} mužů.
+            Vyhlášení války stojí 150 zlatých.
+          </p>
+        </div>
+
+        <div className="war-list">
+          {scenario.countries
+            .filter(country => country.id !== player.id)
+            .map(country => {
+              const atWar = save.wars.includes(country.id);
+              const relation = save.relations[country.id] ?? 0;
+              const enemyArmy = getArmy(country.id);
+
+              return (
+                <div className="war-country-card" key={country.id}>
+                  <div
+                    className="country-color"
+                    style={{ background: country.color }}
+                  />
+
+                  <div className="country-info">
+                    <strong>{country.name}</strong>
+                    <small>{country.ruler}</small>
+                    <span>
+                      Vztahy: {relation} · Armáda:{" "}
+                      {enemyArmy.toLocaleString("cs-CZ")}
+                    </span>
+                  </div>
+
+                  {atWar ? (
+                    <button
+                      className="action-button peace-button"
+                      onClick={() => makePeace(country.id)}
+                    >
+                      <HeartHandshake size={15} />
+                      Mír
+                    </button>
+                  ) : (
+                    <button
+                      className="action-button war-button"
+                      onClick={() => declareWar(country.id)}
+                    >
+                      <Swords size={15} />
+                      Válka
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+
+        <div className="battle-section">
+          <div className="war-section-heading">
+            <span className="eyebrow">VOJENSKÉ OPERACE</span>
+            <h3><Crosshair /> Dostupné cíle</h3>
+            <p>
+              Můžeš útočit pouze na nepřátelské provincie,
+              které sousedí s tvým územím.
+            </p>
+          </div>
+
+          {save.wars.length === 0 ? (
+            <p className="muted">
+              Momentálně nejsi ve válce. Nejprve vyber nepřátelský
+              stát a vyhlaš mu válku.
+            </p>
+          ) : (
+            save.wars.map(enemyId => {
+              const enemy = scenario.countries.find(
+                country => country.id === enemyId
+              );
+
+              const targets = gameProvinces.filter(
+                province =>
+                  province.owner === enemyId &&
+                  canAttackProvince(province)
+              );
+
+              return (
+                <div className="war-target-group" key={enemyId}>
+                  <div className="war-target-title">
+                    <Flag size={16} />
+                    <strong>{enemy?.name ?? enemyId}</strong>
+                  </div>
+
+                  {targets.length === 0 ? (
+                    <p className="muted">
+                      Zatím nemáš přístupnou nepřátelskou provincii.
+                    </p>
+                  ) : (
+                    targets.map(province => (
+                      <div
+                        className="battle-target"
+                        key={province.id}
+                      >
+                        <div className="battle-target-info">
+                          <strong>{province.name}</strong>
+                          <small>
+                            Rozvoj: {province.development} ·
+                            Populace:{" "}
+                            {province.population.toLocaleString("cs-CZ")}
+                          </small>
+                        </div>
+
+                        <button
+                          className="action-button attack-button"
+                          onClick={() => attackProvince(province)}
+                        >
+                          <Swords size={15} />
+                          Zaútočit
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <p className="muted war-rules">
+          Výsledek bitvy závisí na velikosti obou armád a rozvoji
+          bránící se provincie. Vítězství znamená získání území.
+          Každý útok stojí 100 zlatých.
+        </p>
+      </section>
+    );
+  }
+
   function renderContent() {
     if (!player) return null;
 
@@ -336,7 +726,7 @@ export default function App() {
         return (
           <div className="map-layout">
             <EuropeMap
-              provinces={scenario.provinces}
+              provinces={gameProvinces}
               countryColors={countryColors}
               selectedProvince={save.selectedProvince}
               onSelectProvince={id =>
@@ -362,15 +752,25 @@ export default function App() {
             <p>
               Rok vlády: <strong>{save.year}</strong>
             </p>
+
             <div className="stat-card">
               <Building2 />
               <span>Počet provincií</span>
               <strong>
-                {scenario.provinces.filter(
+                {gameProvinces.filter(
                   province => province.owner === player.id
                 ).length}
               </strong>
             </div>
+
+            <div className="stat-card">
+              <Shield />
+              <span>Velikost armády</span>
+              <strong>
+                {playerArmy.toLocaleString("cs-CZ")}
+              </strong>
+            </div>
+
             <p className="muted">
               Zde později přibude správa šlechty, následnictví,
               dvorské intriky, zákony a stabilita říše.
@@ -410,6 +810,8 @@ export default function App() {
                   </div>
                 );
               })}
+
+            {renderWarSection()}
           </section>
         );
 
@@ -440,8 +842,8 @@ export default function App() {
             </div>
 
             <p className="muted">
-              Ekonomika je zatím zjednodušená. Další verze přidá
-              daně, obchod, údržbu armády, produkci a ceny zboží.
+              Vojenské tažení stojí 100 zlatých za útok.
+              Vyhlášení války stojí 150 zlatých.
             </p>
           </section>
         );
@@ -454,7 +856,10 @@ export default function App() {
 
             <div className="chronicle">
               {save.log.map((entry, index) => (
-                <div className="chronicle-entry" key={`${entry}-${index}`}>
+                <div
+                  className="chronicle-entry"
+                  key={`${entry}-${index}`}
+                >
                   <span className="chronicle-dot" />
                   <p>{entry}</p>
                 </div>
@@ -509,7 +914,7 @@ export default function App() {
         countryName={player.name}
         treasury={save.treasury}
         income={player.income}
-        army={player.army}
+        army={playerArmy}
         onNextTurn={nextYear}
       />
 
@@ -518,7 +923,7 @@ export default function App() {
           <span className="eyebrow">HISTORICKÁ KAMPAŇ</span>
           <strong>{scenario.name}</strong>
         </div>
-        <span className="mode-label">VERZE 0.3.0</span>
+        <span className="mode-label">VERZE 0.4.0</span>
       </div>
 
       <div className="game-content">
@@ -539,7 +944,7 @@ export default function App() {
 
       <footer className="game-footer">
         <span>© KORUNY EVROPY</span>
-        <span>Vývojová verze 0.3.0</span>
+        <span>Vývojová verze 0.4.0</span>
       </footer>
     </main>
   );
