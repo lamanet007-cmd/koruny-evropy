@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import {
   Crown, Handshake, Coins, ScrollText, Building2,
@@ -1346,7 +1345,6 @@ export default function App() {
       updateSave({
         treasury: save.treasury - 100,
         armies: newArmies,
-        fieldArmies: updatedFieldArmies,
         generals: updatedGenerals,
         provinceOwners: newOwners,
         selectedProvince: currentProvince.id,
