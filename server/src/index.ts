@@ -1,3 +1,4 @@
+
 import express from "express";
 import path from "node:path";
 
@@ -14,8 +15,11 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Server běží z adresáře server,
+// proto musíme přejít o úroveň výše do client/dist.
 const clientDist = path.resolve(
   process.cwd(),
+  "..",
   "client",
   "dist"
 );
