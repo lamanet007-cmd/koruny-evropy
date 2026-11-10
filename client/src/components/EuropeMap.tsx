@@ -1,3 +1,4 @@
+
 import { useRef, useState } from "react";
 import type { PointerEvent, WheelEvent } from "react";
 import type { Province } from "../data/scenarios";
@@ -78,21 +79,50 @@ export default function EuropeMap({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const suppressClickRef = useRef(false);
 
-  const dragRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    startX: number;
-    startY: number;
-    moved: boolean;
-  } | null>(null);
+  type Point = { x: number; y: number };
+
+  type Gesture =
+    | {
+        type: "pan";
+        pointerId: number;
+        startPoint: Point;
+        startOffset: Point;
+        moved: boolean;
+      }
+    | {
+        type: "pinch";
+        pointerIds: [number, number];
+        startDistance: number;
+        startZoom: number;
+        startOffset: Point;
+        startMidpoint: Point;
+        moved: boolean;
+      };
+
+  const pointersRef = useRef<Map<number, Point>>(new Map());
+  const gestureRef = useRef<Gesture | null>(null);
+
+  function clampZoom(value: number) {
+    return Math.min(2.5, Math.max(0.75, value));
+  }
+
+  function distance(a: Point, b: Point) {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function midpoint(a: Point, b: Point): Point {
+    return {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2
+    };
+  }
 
   function zoomIn() {
-    setZoom(value => Math.min(2.5, value + 0.15));
+    setZoom(value => clampZoom(value + 0.15));
   }
 
   function zoomOut() {
-    setZoom(value => Math.max(0.75, value - 0.15));
+    setZoom(value => clampZoom(value - 0.15));
   }
 
   function resetMap() {
@@ -100,59 +130,247 @@ export default function EuropeMap({
     setOffset({ x: 0, y: 0 });
   }
 
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 && event.pointerType === "mouse") return;
+  function beginGesture() {
+    const activePointers = Array.from(
+      pointersRef.current.entries()
+    );
 
-    event.currentTarget.setPointerCapture(event.pointerId);
-    suppressClickRef.current = false;
+    if (activePointers.length >= 2) {
+      const [first, second] = activePointers.slice(0, 2);
 
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      startX: offset.x,
-      startY: offset.y,
-      moved: false
-    };
+      const firstPoint = first[1];
+      const secondPoint = second[1];
+
+      gestureRef.current = {
+        type: "pinch",
+        pointerIds: [first[0], second[0]],
+        startDistance: Math.max(
+          1,
+          distance(firstPoint, secondPoint)
+        ),
+        startZoom: zoom,
+        startOffset: { ...offset },
+        startMidpoint: midpoint(firstPoint, secondPoint),
+        moved: false
+      };
+
+      suppressClickRef.current = true;
+      return;
+    }
+
+    if (activePointers.length === 1) {
+      const [pointerId, point] = activePointers[0];
+
+      gestureRef.current = {
+        type: "pan",
+        pointerId,
+        startPoint: point,
+        startOffset: { ...offset },
+        moved: false
+      };
+    } else {
+      gestureRef.current = null;
+    }
   }
 
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+  function handlePointerDown(
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    if (
+      event.button !== 0 &&
+      event.pointerType === "mouse"
+    ) {
+      return;
+    }
 
-    const deltaX = event.clientX - drag.x;
-    const deltaY = event.clientY - drag.y;
+    event.currentTarget.setPointerCapture(event.pointerId);
 
-    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
-      drag.moved = true;
+    pointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    suppressClickRef.current = false;
+
+    beginGesture();
+  }
+
+  function handlePointerMove(
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    if (!pointersRef.current.has(event.pointerId)) {
+      return;
+    }
+
+    const point = {
+      x: event.clientX,
+      y: event.clientY
+    };
+
+    pointersRef.current.set(event.pointerId, point);
+
+    const gesture = gestureRef.current;
+
+    if (!gesture) return;
+
+    // Posouvání mapy jedním prstem nebo myší.
+    if (
+      gesture.type === "pan" &&
+      gesture.pointerId === event.pointerId
+    ) {
+      const deltaX = point.x - gesture.startPoint.x;
+      const deltaY = point.y - gesture.startPoint.y;
+
+      if (
+        Math.abs(deltaX) > 4 ||
+        Math.abs(deltaY) > 4
+      ) {
+        gesture.moved = true;
+        suppressClickRef.current = true;
+      }
+
+      if (gesture.moved) {
+        setOffset({
+          x: gesture.startOffset.x + deltaX,
+          y: gesture.startOffset.y + deltaY
+        });
+      }
+
+      return;
+    }
+
+    // Přibližování a posouvání dvěma prsty.
+    if (gesture.type === "pinch") {
+      const first = pointersRef.current.get(
+        gesture.pointerIds[0]
+      );
+
+      const second = pointersRef.current.get(
+        gesture.pointerIds[1]
+      );
+
+      if (!first || !second) return;
+
+      const currentDistance = Math.max(
+        1,
+        distance(first, second)
+      );
+
+      const currentMidpoint = midpoint(first, second);
+
+      const nextZoom = clampZoom(
+        gesture.startZoom *
+        (currentDistance / gesture.startDistance)
+      );
+
+      const rect = event.currentTarget.getBoundingClientRect();
+
+      const center = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2
+      };
+
+      const zoomRatio = nextZoom / gesture.startZoom;
+
+      // Zachování bodu mapy pod prsty.
+      setOffset({
+        x:
+          currentMidpoint.x -
+          center.x -
+          (
+            gesture.startMidpoint.x -
+            center.x -
+            gesture.startOffset.x
+          ) * zoomRatio,
+
+        y:
+          currentMidpoint.y -
+          center.y -
+          (
+            gesture.startMidpoint.y -
+            center.y -
+            gesture.startOffset.y
+          ) * zoomRatio
+      });
+
+      setZoom(nextZoom);
+
+      if (
+        Math.abs(
+          currentDistance - gesture.startDistance
+        ) > 3 ||
+        distance(
+          currentMidpoint,
+          gesture.startMidpoint
+        ) > 4
+      ) {
+        gesture.moved = true;
+        suppressClickRef.current = true;
+      }
+    }
+  }
+
+  function handlePointerUp(
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    const gesture = gestureRef.current;
+
+    if (
+      gesture?.type === "pan" &&
+      gesture.pointerId === event.pointerId &&
+      gesture.moved
+    ) {
       suppressClickRef.current = true;
     }
 
-    if (drag.moved) {
-      setOffset({
-        x: drag.startX + deltaX,
-        y: drag.startY + deltaY
-      });
+    if (gesture?.type === "pinch") {
+      suppressClickRef.current = true;
     }
+
+    pointersRef.current.delete(event.pointerId);
+
+    // Pokud jeden prst zůstane na mapě,
+    // pokračujeme automaticky v posouvání.
+    beginGesture();
   }
 
-  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-
-    if (drag.moved) suppressClickRef.current = true;
-    dragRef.current = null;
-  }
-
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+  function handleWheel(
+    event: WheelEvent<HTMLDivElement>
+  ) {
     event.preventDefault();
 
-    setZoom(value =>
-      Math.min(
-        2.5,
-        Math.max(0.75, value + (event.deltaY < 0 ? 0.1 : -0.1))
-      )
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    const focal = {
+      x: event.clientX,
+      y: event.clientY
+    };
+
+    const center = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+
+    const nextZoom = clampZoom(
+      zoom + (event.deltaY < 0 ? 0.1 : -0.1)
     );
+
+    const ratio = nextZoom / zoom;
+
+    // Kolečko přibližuje místo pod kurzorem.
+    setOffset({
+      x:
+        focal.x -
+        center.x -
+        (focal.x - center.x - offset.x) * ratio,
+
+      y:
+        focal.y -
+        center.y -
+        (focal.y - center.y - offset.y) * ratio
+    });
+
+    setZoom(nextZoom);
   }
 
   function selectProvince(id: string) {
@@ -170,7 +388,10 @@ export default function EuropeMap({
 
   const oldArmies = Object.entries(armyLocations)
     .map(([countryId, provinceId]) => {
-      const province = provinces.find(item => item.id === provinceId);
+      const province = provinces.find(
+        item => item.id === provinceId
+      );
+
       const position = positions[provinceId];
 
       if (!province || !position) return null;
@@ -193,7 +414,10 @@ export default function EuropeMap({
 
   const separateArmies = armyMarkers
     .map(army => {
-      const province = provinces.find(item => item.id === army.provinceId);
+      const province = provinces.find(
+        item => item.id === army.provinceId
+      );
+
       const position = positions[army.provinceId];
 
       if (!province || !position) return null;
@@ -208,24 +432,43 @@ export default function EuropeMap({
         army !== null && army.count >= 0
     );
 
-  const armiesOnMap = [...oldArmies, ...separateArmies];
+  const armiesOnMap = [
+    ...oldArmies,
+    ...separateArmies
+  ];
 
   return (
     <section className="map-panel">
       <div className="map-topline">
         <div>
-          <span className="eyebrow">STRATEGICKÁ MAPA</span>
+          <span className="eyebrow">
+            STRATEGICKÁ MAPA
+          </span>
           <h2>Evropa</h2>
         </div>
 
         <div className="map-controls">
-          <button type="button" onClick={zoomOut} aria-label="Oddálit mapu">
+          <button
+            type="button"
+            onClick={zoomOut}
+            aria-label="Oddálit mapu"
+          >
             −
           </button>
-          <button type="button" onClick={zoomIn} aria-label="Přiblížit mapu">
+
+          <button
+            type="button"
+            onClick={zoomIn}
+            aria-label="Přiblížit mapu"
+          >
             +
           </button>
-          <button type="button" onClick={resetMap} aria-label="Obnovit mapu">
+
+          <button
+            type="button"
+            onClick={resetMap}
+            aria-label="Obnovit mapu"
+          >
             ↺
           </button>
         </div>
@@ -274,7 +517,11 @@ export default function EuropeMap({
             </pattern>
           </defs>
 
-          <rect width="1000" height="700" fill="#8da5a0" />
+          <rect
+            width="1000"
+            height="700"
+            fill="#8da5a0"
+          />
 
           <g
             fill="#b7a47b"
@@ -350,9 +597,12 @@ export default function EuropeMap({
 
           {provinces.map(province => {
             const shape = shapes[province.id];
+
             if (!shape) return null;
 
-            const active = selectedProvince === province.id;
+            const active =
+              selectedProvince === province.id;
+
             const position = positions[province.id];
 
             return (
@@ -363,7 +613,9 @@ export default function EuropeMap({
               >
                 <path
                   d={shape}
-                  fill={countryColors[province.owner] ?? "#777"}
+                  fill={
+                    countryColors[province.owner] ?? "#777"
+                  }
                   stroke={active ? "#fff1bd" : "#51422e"}
                   strokeWidth={active ? 6 : 3}
                   opacity={active ? 1 : 0.92}
@@ -401,20 +653,33 @@ export default function EuropeMap({
             {armiesOnMap.map((army, index) => {
               const sameProvince = armiesOnMap
                 .slice(0, index)
-                .filter(item => item.provinceId === army.provinceId).length;
+                .filter(
+                  item =>
+                    item.provinceId === army.provinceId
+                ).length;
 
-              const x = army.position.x + 20 + (sameProvince % 3) * 28;
-              const y = army.position.y - 25 + Math.floor(sameProvince / 3) * 28;
+              const x =
+                army.position.x +
+                20 +
+                (sameProvince % 3) * 28;
+
+              const y =
+                army.position.y -
+                25 +
+                Math.floor(sameProvince / 3) * 28;
 
               return (
                 <g
                   key={army.id}
                   transform={`translate(${x} ${y})`}
                   style={{
-                    cursor: army.id.startsWith("legacy-") ? "default" : "pointer"
+                    cursor: army.id.startsWith("legacy-")
+                      ? "default"
+                      : "pointer"
                   }}
                   onClick={event => {
                     event.stopPropagation();
+
                     if (!army.id.startsWith("legacy-")) {
                       onSelectArmy?.(army.id);
                     }
@@ -433,7 +698,9 @@ export default function EuropeMap({
                   <circle
                     r="18"
                     fill="#2c241b"
-                    stroke={army.selected ? "#ffe28b" : "#e7d3a4"}
+                    stroke={
+                      army.selected ? "#ffe28b" : "#e7d3a4"
+                    }
                     strokeWidth={army.selected ? 4 : 2.5}
                   />
 
@@ -474,21 +741,27 @@ export default function EuropeMap({
             })}
           </g>
 
-          <g transform="translate(910 100)" pointerEvents="none">
+          <g
+            transform="translate(910 100)"
+            pointerEvents="none"
+          >
             <circle
               r="38"
               fill="#d8c69d"
               stroke="#6e593b"
               strokeWidth="2"
             />
+
             <path
               d="M0 -28 L9 0 L0 28 L-9 0 Z"
               fill="#6f4932"
             />
+
             <path
               d="M0 -28 L0 28 L-9 0 Z"
               fill="#eee0bd"
             />
+
             <text
               x="0"
               y="-46"
@@ -549,8 +822,8 @@ export default function EuropeMap({
           textAlign: "center"
         }}
       >
-        Přibližování: tlačítka nebo kolečko myši · Posouvání: tažením prstem
-        · Výběr armády: klepnutím na její značku
+        Přiblížení: tlačítka, kolečko nebo dva prsty · Posouvání: tažením
+        · Výběr provincie či armády: klepnutím na značku
       </div>
     </section>
   );
